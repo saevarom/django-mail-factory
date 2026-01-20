@@ -4,6 +4,10 @@ from os.path import basename
 
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives, SafeMIMEMultipart
+try:
+    from django.core.mail.message import EmailAlternative
+except ImportError:  # pragma: no cover - Django < 1.7 fallback
+    EmailAlternative = None
 
 
 # http://djangosnippets.org/snippets/2215/
@@ -71,7 +75,13 @@ class EmailMultiRelated(EmailMultiAlternatives):
         )
 
     def _create_alternatives(self, msg):
-        for i, (content, mimetype) in enumerate(self.alternatives):
+        for i, alternative in enumerate(self.alternatives):
+            if hasattr(alternative, "mimetype"):
+                content = alternative.content
+                mimetype = alternative.mimetype
+            else:
+                content, mimetype = alternative
+
             if mimetype == "text/html":
                 for filename, _, _ in self.related_attachments:
                     content = re.sub(
@@ -79,7 +89,11 @@ class EmailMultiRelated(EmailMultiAlternatives):
                         "cid:%s" % filename,
                         content,
                     )
-                self.alternatives[i] = (content, mimetype)
+
+                if EmailAlternative:
+                    self.alternatives[i] = EmailAlternative(content, mimetype)
+                else:
+                    self.alternatives[i] = (content, mimetype)
 
         return super()._create_alternatives(msg)
 
